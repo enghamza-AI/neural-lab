@@ -1,4 +1,4 @@
-# **neural-lab**
+# **neural-lab 👨‍💻**
 *Unstructured experiments in ML, DL, and CV.*
 
 ---
