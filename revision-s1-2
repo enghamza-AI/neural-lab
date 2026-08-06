@@ -1,0 +1,151 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import (
+    train_test_split,
+    KFold,
+    StratifiedGroupKFold,
+    GroupKFold,
+    learning_curve,
+)
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler,  OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+import xgboost as xgb
+
+RANDOM_STATE = 42
+
+print("-" * 20)
+print("Gradient descent by hand")
+print("-"*20)
+
+hours_studied = np.array([1,2,3,4,5], dtype=float)
+exam_score = np.array([52, 58, 63, 70, 75], dtype=float)
+
+w = 0.0
+b = 0.0
+learning_rate = 0.05
+epochs = 1000
+n = len(hours_studied)
+
+loss_history = []
+
+for epoch in range(epochs):
+    y_pred = w * hours_studied + b
+    error = y_pred - exam_score
+
+    loss = np.mean(error ** 2)
+    loss_history.append(loss)
+
+    grad_w = (2 / n) * np.sum(error * hours_studied)
+    grad_b = (2 / n) * np.sum(error)
+
+    w = w - learning_rate * grad_w
+    b = b - learning_rate * grad_b
+
+print(f"Learned slope (w):  {w:.3f}")
+print(f"Learned intercept (b): {b:.3f}")
+print(f"Final loss (MSE):    {loss_history[-1]:.4f}")
+print(f"Loss after epoch 1: {loss_history[0]:.4f}")
+print(f"Loss after 10 epochs:   {loss_history[9]:.4f}")
+print(f"loss after 900 epochs: {loss_history[899]:.4f}")
+
+# Features and Labels
+
+print("-" * 20)
+print("Features VS Labels")
+print("-" * 20)
+
+df = pd.read_csv("train.csv")
+print("shape of raw data (rows, columns):", df.shape)
+print("\ncolumn names:")
+print(list(df.columns))
+
+LABEL_COL = "Survived"
+
+y = df[LABEL_COL]
+x = df.drop(columns=[LABEL_COL])
+
+print(f"\nLabel column: '{LABEL_COL}'")
+print("First 5 label values:", y.head().tolist())
+print("Feature columns:", list(x.columns))
+
+# Signal & Noise
+
+print("-" * 20)
+print("Signal & noise (injecting random numbers in dataset)")
+print("-" * 20)
+
+rng = np.random.default_rng(RANDOM_STATE)
+df["random_noise"] = rng.normal(size=len(df))
+sex_numeric = df["Sex"].map({"male":0, "female": 1})
+comparison = pd.DataFrame({
+    "Pclass": df["Pclass"],
+    "Fare": df["Fare"],
+    "Sex_numeric": sex_numeric,
+    "random_noise": df["random_noise"],
+    "Survived": df["Survived"],
+}).corr(numeric_only=True)["Survived"].drop("Survived")
+
+print("correlation of each feature with survived:")
+print(comparison.sort_values(key=abs, ascending=False))
+
+# EDA
+
+print("-" * 20)
+print("Exploratory Data Analysis")
+print("-" * 20)
+
+print(df.info())
+missing = df.isnull().sum().sort_values(ascending=False)
+missing_pct = (missing / len(df) * 100).round(1)
+print(pd.DataFrame({"missing_count": missing, "missing_pct": missing_pct}))
+
+print(df.describe())
+print(df.groupby("Sex")["Survived"].mean())
+print(df.groupby("Pclass")["Survived"].mean())
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+ 
+axes[0].hist(df["Age"].dropna(), bins=30, color="#4C72B0", edgecolor="white")
+axes[0].set_title("Age Distribution")
+axes[0].set_xlabel("Age")
+axes[0].set_ylabel("Count")
+ 
+df.groupby("Pclass")["Survived"].mean().plot(kind="bar", ax=axes[1], color="#DD8452")
+axes[1].set_title("Survival Rate by Passenger Class")
+axes[1].set_ylabel("Survival Rate")
+ 
+plt.tight_layout()
+plt.savefig("eda_overview.png", dpi=120)
+print("\nSaved plot to eda_overview.png")
+
+print("-" * 20)
+print("Data cleaning")
+print("-" * 20)
+
+df_clean = df.copy()
+
+age_median = df_clean["Age"].median()
+df_clean["Age"] = df_clean["Age"].fillna(age_median)
+print(f"Filled missing age with median: {age_median}")
+
+embarked_mode = df_clean["Embarked"].mode()[0]
+df_clean["Embarked"] = df_clean["Embarked"].fillna(embarked_mode)
+print(f"Filled missing Embarked with mode: '{embarked_mode}")
+
+df_clean["Cabin_known"] = df["Cabin"].notnull().astype(int)
+df_clean = df_clean.drop(columns=["Cabin"])
+print("Converted Cabin to binary 'Cabin_known' flag, dropped raw Cabin text.")
+ 
+print("\nRemaining missing values after cleaning:")
+print(df_clean.isnull().sum()[df_clean.isnull().sum() > 0])
+
